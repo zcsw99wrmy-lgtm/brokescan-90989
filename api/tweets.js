@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
   const query = (req.query.query || 'can i get sol').toString();
-  const API_KEY = process.env.TWITTERAPI_KEY || 'new1_a9879c8b4bae437ea1e258ce05468ede';
+  const API_KEY = process.env.TWITTERAPI_KEY || 'new1_81110953bed34c47b39bed4df8de1d48';
 
   const url = 'https://api.twitterapi.io/twitter/tweet/advanced_search'
             + '?query=' + encodeURIComponent(query)
