@@ -1,29 +1,19 @@
-// /api/fetch-tweets.js — серверный крон, вызывается Vercel Cron каждую минуту
-// Сам фетчит твиты и сохраняет в Blob — браузеры только читают /api/feed
-
-import { put } from '@vercel/blob';
+import { put, list, getDownloadUrl } from '@vercel/blob';
 
 const API_KEY  = process.env.TWITTERAPI_KEY || 'new1_b5fb91a3bf4f4b36807b97be5f36b076';
-const TOKEN    = process.env.BLOB_READ_WRITE_TOKEN;
 const FEED_KEY = 'brokescan-feed.json';
 const MAX_TWEETS = 100;
-const MAX_AGE_MS = 5 * 60 * 1000; // только твиты не старше 5 минут
+const MAX_AGE_MS = 5 * 60 * 1000;
 
 const QUERIES = [
-  'can i get sol',
-  'can i get some sol',
-  'send me sol please',
-  'need sol please',
-  'give me sol',
-  'pls send sol',
-  'can someone send sol',
-  'drop me some sol',
-  'bless me sol',
-  'likes for sol',
+  'can i get sol', 'can i get some sol', 'send me sol please',
+  'need sol please', 'give me sol', 'pls send sol',
+  'can someone send sol', 'drop me some sol', 'bless me sol',
+  'likes for sol', 'how many likes for sol',
 ];
 
 const BEG_STOPS = [
-  'i bought','i sold','just bought','just sold','sol price','sol hits','sol is',
+  'i bought','i sold','just bought','just sold','sol price','sol hits',
   'pumping','dumping','bullish','bearish','buy signal','sell signal',
   'sent you','just sent','giving away','airdrop','sol at ','sol to $',
 ];
@@ -35,6 +25,7 @@ const BEG_PATTERNS = [
   /\bretweets?\s+for\s+(sol|solana)\b/i, /\bmy (sol |solana |)wallet\b/i,
   /\bcan someone (send|give|drop)\b/i, /\banyone (send|give|drop)\b/i,
   /\bspare\s+(some\s+)?(sol|solana)\b/i,
+  /\bhow many (likes?|rts?|retweets?)\b/i,
 ];
 
 function isBeg(text) {
@@ -47,22 +38,28 @@ function isBeg(text) {
 
 async function readFeed() {
   try {
-    const url = `https://blob.vercel-storage.com/${FEED_KEY}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    const { blobs } = await list({ prefix: FEED_KEY });
+    if (!blobs.length) return [];
+    const r = await fetch(blobs[0].downloadUrl);
     if (!r.ok) return [];
     return await r.json();
-  } catch { return []; }
+  } catch (e) {
+    console.error('readFeed error:', e.message);
+    return [];
+  }
 }
 
 async function writeFeed(data) {
   await put(FEED_KEY, JSON.stringify(data), {
-    access: 'public', token: TOKEN,
-    addRandomSuffix: false, contentType: 'application/json',
+    access: 'public',
+    addRandomSuffix: false,
+    contentType: 'application/json',
   });
 }
 
 export default async function handler(req, res) {
-  // Защита: только Vercel Cron или запрос с секретом
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
   const secret = req.headers['x-cron-secret'] || req.query.secret;
   if (secret !== (process.env.CRON_SECRET || 'brokescan123')) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -71,20 +68,22 @@ export default async function handler(req, res) {
   const existing = await readFeed();
   const existingIds = new Set(existing.map(t => t.tweet_id));
   const now = Date.now();
-  let added = 0;
-
-  // Берём случайные 3 запроса из списка за этот цикл
-  const picked = QUERIES.sort(() => 0.5 - Math.random()).slice(0, 3);
   const newTweets = [];
+
+  const picked = [...QUERIES].sort(() => 0.5 - Math.random()).slice(0, 3);
 
   for (const query of picked) {
     try {
       const url = 'https://api.twitterapi.io/twitter/tweet/advanced_search'
                 + '?query=' + encodeURIComponent(query) + '&queryType=Latest';
       const r = await fetch(url, { headers: { 'X-API-Key': API_KEY } });
-      if (!r.ok) continue;
+      if (!r.ok) {
+        console.error('Twitter API error:', r.status, await r.text());
+        continue;
+      }
       const data = await r.json();
       const raw = data.tweets || data.timeline || data.results || [];
+      console.log(`query "${query}" → ${raw.length} tweets`);
 
       for (const t of raw) {
         const id = String(t.id || t.tweet_id || t.id_str || '');
@@ -95,7 +94,6 @@ export default async function handler(req, res) {
         const createdAt = t.createdAt || t.created_at || t.creation_date || '';
         const ts = createdAt ? Date.parse(createdAt) : 0;
 
-        // Только свежие твиты (не старше 5 минут)
         if (ts && (now - ts) > MAX_AGE_MS) continue;
         if (!isBeg(text)) continue;
 
@@ -111,15 +109,14 @@ export default async function handler(req, res) {
           fetched_at:    now,
         });
         existingIds.add(id);
-        added++;
       }
     } catch (e) {
       console.error('fetch error:', e.message);
     }
   }
 
+  const added = newTweets.length;
   if (added > 0) {
-    // Новые сверху, убираем старше 5 минут, обрезаем до 100
     const merged = [...newTweets, ...existing]
       .filter(t => !t.fetched_at || (now - t.fetched_at) < MAX_AGE_MS)
       .slice(0, MAX_TWEETS);
