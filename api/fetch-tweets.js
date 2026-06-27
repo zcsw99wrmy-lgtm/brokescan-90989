@@ -45,6 +45,7 @@ async function writeFeed(data) {
   await put(FEED_KEY, JSON.stringify(data), {
     access: 'private',
     addRandomSuffix: false,
+    allowOverwrite: true,
     contentType: 'application/json',
   });
 }
