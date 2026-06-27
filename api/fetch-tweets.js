@@ -1,23 +1,19 @@
 import { put, list } from '@vercel/blob';
-
 const API_KEY    = process.env.TWITTERAPI_KEY || 'new1_9c1b2678858245aa8481037949cbe980';
 const FEED_KEY   = 'brokescan-feed.json';
 const MAX_TWEETS = 100;
 const MAX_AGE_MS = 5 * 60 * 1000;
-
 const QUERIES = [
   'can i get sol', 'can i get some sol', 'send me sol please',
   'need sol please', 'give me sol', 'pls send sol',
   'can someone send sol', 'drop me some sol', 'bless me sol',
   'likes for sol', 'how many likes for sol',
 ];
-
 const BEG_STOPS = [
   'i bought','i sold','just bought','just sold','sol price','sol hits',
   'pumping','dumping','bullish','bearish','buy signal','sell signal',
   'sent you','just sent','giving away','airdrop','sol at ','sol to $',
 ];
-
 const BEG_PATTERNS = [
   /\bcan i get\b/i, /\bcan i have\b/i, /\bplease send\b/i, /\bpls send\b/i,
   /\bsend me\b/i, /\bgive me\b/i, /\bdrop me\b/i, /\bneed (some |a |)sol\b/i,
@@ -26,7 +22,6 @@ const BEG_PATTERNS = [
   /\bcan someone (send|give|drop)\b/i, /\banyone (send|give|drop)\b/i,
   /\bspare\s+(some\s+)?(sol|solana)\b/i, /\bhow many (likes?|rts?|retweets?)\b/i,
 ];
-
 function isBeg(text) {
   if (!text) return false;
   const tl = text.toLowerCase();
@@ -34,7 +29,6 @@ function isBeg(text) {
   if (BEG_STOPS.some(kw => tl.includes(kw))) return false;
   return BEG_PATTERNS.some(re => re.test(text));
 }
-
 async function readFeed() {
   try {
     const { blobs } = await list({ prefix: FEED_KEY });
@@ -47,31 +41,25 @@ async function readFeed() {
     return [];
   }
 }
-
 async function writeFeed(data) {
   await put(FEED_KEY, JSON.stringify(data), {
-    access: 'public',
+    access: 'private',
     addRandomSuffix: false,
     contentType: 'application/json',
   });
 }
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-
   const secret = req.headers['x-cron-secret'] || req.query.secret;
   if (secret !== (process.env.CRON_SECRET || 'brokescan123')) {
     return res.status(401).json({ error: 'unauthorized' });
   }
-
   const existing = await readFeed();
   const existingIds = new Set(existing.map(t => t.tweet_id));
   const now = Date.now();
   const newTweets = [];
-
   const picked = [...QUERIES].sort(() => 0.5 - Math.random()).slice(0, 3);
   console.log('Fetching queries:', picked);
-
   for (const query of picked) {
     try {
       const url = 'https://api.twitterapi.io/twitter/tweet/advanced_search'
@@ -84,7 +72,6 @@ export default async function handler(req, res) {
       const data = await r.json();
       const raw = data.tweets || data.timeline || data.results || [];
       console.log(`"${query}" → ${raw.length} tweets, isBeg: ${raw.filter(t => isBeg(t.text || t.full_text)).length}`);
-
       for (const t of raw) {
         const id = String(t.id || t.tweet_id || t.id_str || '');
         if (!id || existingIds.has(id)) continue;
@@ -94,7 +81,6 @@ export default async function handler(req, res) {
         const ts = createdAt ? Date.parse(createdAt) : 0;
         if (ts && (now - ts) > MAX_AGE_MS) continue;
         if (!isBeg(text)) continue;
-
         newTweets.push({
           tweet_id:      id,
           text,
@@ -112,16 +98,13 @@ export default async function handler(req, res) {
       console.error('fetch error:', e.message);
     }
   }
-
   const added = newTweets.length;
   console.log(`Added ${added} new tweets`);
-
   if (added > 0) {
     const merged = [...newTweets, ...existing]
       .filter(t => !t.fetched_at || (now - t.fetched_at) < MAX_AGE_MS)
       .slice(0, MAX_TWEETS);
     await writeFeed(merged);
   }
-
   res.status(200).json({ added, total: existing.length + added });
 }
