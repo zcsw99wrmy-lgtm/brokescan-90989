@@ -1,13 +1,14 @@
-import { put, list } from '@vercel/blob';
+import { put, list, get } from '@vercel/blob';
 const FEED_KEY   = 'brokescan-feed.json';
 const MAX_AGE_MS = 30 * 60 * 1000;
 async function readFeed() {
   try {
     const { blobs } = await list({ prefix: FEED_KEY });
     if (!blobs.length) return [];
-    const r = await fetch(blobs[0].downloadUrl);
-    if (!r.ok) return [];
-    return await r.json();
+    const result = await get(blobs[0].pathname, { access: 'private' });
+    if (!result || !result.stream) return [];
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text);
   } catch { return []; }
 }
 export default async function handler(req, res) {
