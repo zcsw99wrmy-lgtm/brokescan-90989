@@ -1,27 +1,20 @@
-// /api/leaderboard.js — хранит лидерборд в Vercel Blob
-// GET  /api/leaderboard  → возвращает всех участников
-// POST /api/leaderboard  → обновляет/добавляет участника
+import { put, list } from '@vercel/blob';
 
-import { put } from '@vercel/blob';
+const LB_KEY = 'brokescan-leaderboard.json';
 
-const BLOB_KEY = 'brokescan-leaderboard.json';
-const TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
-
-async function readBlob() {
+async function readLb() {
   try {
-    const url = `https://blob.vercel-storage.com/${BLOB_KEY}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    const { blobs } = await list({ prefix: LB_KEY });
+    if (!blobs.length) return {};
+    const r = await fetch(blobs[0].downloadUrl);
     if (!r.ok) return {};
     return await r.json();
   } catch { return {}; }
 }
 
-async function writeBlob(data) {
-  await put(BLOB_KEY, JSON.stringify(data), {
-    access: 'public',
-    token: TOKEN,
-    addRandomSuffix: false,
-    contentType: 'application/json',
+async function writeLb(data) {
+  await put(LB_KEY, JSON.stringify(data), {
+    access: 'public', addRandomSuffix: false, contentType: 'application/json',
   });
 }
 
@@ -30,15 +23,14 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'GET') {
-    const lb = await readBlob();
+    const lb = await readLb();
     return res.status(200).json({ leaderboard: lb });
   }
 
   if (req.method === 'POST') {
     const entry = req.body;
     if (!entry?.handle) return res.status(400).json({ error: 'handle required' });
-
-    const lb = await readBlob();
+    const lb = await readLb();
     const ex = lb[entry.handle];
     lb[entry.handle] = {
       name:       entry.name   || ex?.name   || entry.handle,
@@ -52,8 +44,7 @@ export default async function handler(req, res) {
       firstSeen:  ex?.firstSeen || Date.now(),
       lastSeen:   Date.now(),
     };
-
-    await writeBlob(lb);
+    await writeLb(lb);
     return res.status(200).json({ ok: true });
   }
 
