@@ -1,7 +1,7 @@
-import { put, list, getDownloadUrl } from '@vercel/blob';
+import { put, list } from '@vercel/blob';
 
-const API_KEY  = process.env.TWITTERAPI_KEY || 'new1_b5fb91a3bf4f4b36807b97be5f36b076';
-const FEED_KEY = 'brokescan-feed.json';
+const API_KEY    = process.env.TWITTERAPI_KEY || 'new1_b5fb91a3bf4f4b36807b97be5f36b076';
+const FEED_KEY   = 'brokescan-feed.json';
 const MAX_TWEETS = 100;
 const MAX_AGE_MS = 5 * 60 * 1000;
 
@@ -24,8 +24,7 @@ const BEG_PATTERNS = [
   /\bbless me\b/i, /\bbless my wallet\b/i, /\blikes?\s+for\s+(sol|solana)\b/i,
   /\bretweets?\s+for\s+(sol|solana)\b/i, /\bmy (sol |solana |)wallet\b/i,
   /\bcan someone (send|give|drop)\b/i, /\banyone (send|give|drop)\b/i,
-  /\bspare\s+(some\s+)?(sol|solana)\b/i,
-  /\bhow many (likes?|rts?|retweets?)\b/i,
+  /\bspare\s+(some\s+)?(sol|solana)\b/i, /\bhow many (likes?|rts?|retweets?)\b/i,
 ];
 
 function isBeg(text) {
@@ -44,7 +43,7 @@ async function readFeed() {
     if (!r.ok) return [];
     return await r.json();
   } catch (e) {
-    console.error('readFeed error:', e.message);
+    console.error('readFeed:', e.message);
     return [];
   }
 }
@@ -71,6 +70,7 @@ export default async function handler(req, res) {
   const newTweets = [];
 
   const picked = [...QUERIES].sort(() => 0.5 - Math.random()).slice(0, 3);
+  console.log('Fetching queries:', picked);
 
   for (const query of picked) {
     try {
@@ -78,22 +78,20 @@ export default async function handler(req, res) {
                 + '?query=' + encodeURIComponent(query) + '&queryType=Latest';
       const r = await fetch(url, { headers: { 'X-API-Key': API_KEY } });
       if (!r.ok) {
-        console.error('Twitter API error:', r.status, await r.text());
+        console.error('Twitter API:', r.status, await r.text());
         continue;
       }
       const data = await r.json();
       const raw = data.tweets || data.timeline || data.results || [];
-      console.log(`query "${query}" → ${raw.length} tweets`);
+      console.log(`"${query}" → ${raw.length} tweets, isBeg: ${raw.filter(t => isBeg(t.text || t.full_text)).length}`);
 
       for (const t of raw) {
         const id = String(t.id || t.tweet_id || t.id_str || '');
         if (!id || existingIds.has(id)) continue;
-
         const a = t.author || t.user || {};
         const text = t.text || t.full_text || '';
         const createdAt = t.createdAt || t.created_at || t.creation_date || '';
         const ts = createdAt ? Date.parse(createdAt) : 0;
-
         if (ts && (now - ts) > MAX_AGE_MS) continue;
         if (!isBeg(text)) continue;
 
@@ -116,6 +114,8 @@ export default async function handler(req, res) {
   }
 
   const added = newTweets.length;
+  console.log(`Added ${added} new tweets`);
+
   if (added > 0) {
     const merged = [...newTweets, ...existing]
       .filter(t => !t.fetched_at || (now - t.fetched_at) < MAX_AGE_MS)
