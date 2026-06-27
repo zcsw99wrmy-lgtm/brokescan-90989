@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/fetch-tweets?secret=brokescan123",
-      "schedule": "* * * * *"
-    }
-  ]
-}
