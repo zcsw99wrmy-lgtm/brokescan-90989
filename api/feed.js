@@ -1,7 +1,6 @@
 import { put, list } from '@vercel/blob';
 
 const FEED_KEY   = 'brokescan-feed.json';
-const MAX_TWEETS = 100;
 const MAX_AGE_MS = 5 * 60 * 1000;
 
 async function readFeed() {
@@ -14,12 +13,6 @@ async function readFeed() {
   } catch { return []; }
 }
 
-async function writeFeed(data) {
-  await put(FEED_KEY, JSON.stringify(data), {
-    access: 'public', addRandomSuffix: false, contentType: 'application/json',
-  });
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
@@ -27,7 +20,6 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const now = Date.now();
     const all = await readFeed();
-    // Только свежие твиты
     const tweets = all.filter(t => !t.fetched_at || (now - t.fetched_at) < MAX_AGE_MS);
     return res.status(200).json({ tweets });
   }
