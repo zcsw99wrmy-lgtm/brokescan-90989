@@ -60,7 +60,7 @@ export default async function handler(req, res) {
   const existingIds = new Set(existing.map(t => t.tweet_id));
   const now = Date.now();
   const newTweets = [];
-  const picked = [...QUERIES].sort(() => 0.5 - Math.random()).slice(0, 3);
+  const picked = QUERIES; // все запросы
   console.log('Fetching queries:', picked);
   for (const query of picked) {
     try {
