@@ -19,7 +19,9 @@ async function readLb() {
 
 async function writeLb(data) {
   await put(LB_KEY, JSON.stringify(data), {
-    access: 'public', addRandomSuffix: false,
+    access: 'public',
+    addRandomSuffix: false,
+    allowOverwrite: true,
     contentType: 'application/json',
   });
 }
