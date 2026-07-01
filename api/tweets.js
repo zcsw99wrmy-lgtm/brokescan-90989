@@ -7,7 +7,7 @@ export default async function handler(req, res) {
 
   // Ключ берётся из переменной окружения Vercel (Settings → Environment Variables),
   // либо хардкод-фолбэк ниже.
-  const API_KEY = process.env.TWITTERAPI_KEY || 'new1_9c1b2оовоово6788582458481037949cbe980';
+  const API_KEY = process.env.TWITTERAPI_KEY || 'new1_c1dc357c8ff84686a28fecd763990be0';
 
   const url = 'https://api.twitterapi.io/twitter/tweet/advanced_search'
             + '?query=' + encodeURIComponent(query)
