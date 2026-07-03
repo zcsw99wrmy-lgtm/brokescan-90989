@@ -1,4 +1,4 @@
-// api/_lib/airdrop-service.js
+// api/airdrop-service.js
 import {
   Connection,
   Keypair,
@@ -9,7 +9,7 @@ import {
   LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-import { readLb } from '../leaderboard.js';
+import { readLb } from './leaderboard.js';
 
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const AIRDROP_AMOUNT_SOL_DEFAULT = parseFloat(process.env.AIRDROP_AMOUNT_SOL || '0.5');
@@ -36,7 +36,6 @@ export async function pickRandomRecipient(opts = {}) {
   );
 
   if (poolSize > 0) {
-    // без хранимого баланса сортируем по активности (кол-во твитов) как прокси "топа"
     entries = entries
       .sort((a, b) => (b.tweetCount || 0) - (a.tweetCount || 0))
       .slice(0, poolSize);
