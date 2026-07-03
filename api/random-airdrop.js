@@ -1,5 +1,5 @@
-// api/admin/random-airdrop.js
-import { runRandomAirdrop } from '../_lib/airdrop-service.js';
+// api/random-airdrop.js
+import { runRandomAirdrop } from './airdrop-service.js';
 
 // Простая защита: секретный токен в заголовке или переменных окружения.
 // Установите ADMIN_AIRDROP_TOKEN в Vercel → Settings → Environment Variables.
