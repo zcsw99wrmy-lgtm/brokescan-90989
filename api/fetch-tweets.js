@@ -1,5 +1,5 @@
 import { put, list, get } from '@vercel/blob';
-const API_KEY    = process.env.TWITTERAPI_KEY || 'new1_9c1b2678858245aa8481037949cbe980';
+const API_KEY    = process.env.TWITTERAPI_KEY || 'new1_4a0be9b5a0714182bd02038ebef458b5';
 const FEED_KEY   = 'brokescan-feed.json';
 const MAX_TWEETS = 100;
 const MAX_AGE_MS = 30 * 60 * 1000;
