@@ -1,5 +1,5 @@
 import { put, list, get } from '@vercel/blob';
-const API_KEY    = process.env.TWITTERAPI_KEY || 'new1_4a0be9b5a0714182bd02038ebef458b5';
+const API_KEY    = process.env.TWITTERAPI_KEY || 'new1_9c1b2678858245aa8481037949cbe980';
 const FEED_KEY   = 'brokescan-feed.json';
 const MAX_TWEETS = 100;
 const MAX_AGE_MS = 30 * 60 * 1000;
@@ -59,6 +59,10 @@ async function writeFeed(data) {
     contentType: 'application/json',
   });
 }
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const secret = req.headers['x-cron-secret'] || req.query.secret;
@@ -69,9 +73,11 @@ export default async function handler(req, res) {
   const existingIds = new Set(existing.map(t => t.tweet_id));
   const now = Date.now();
   const newTweets = [];
-  const picked = [...QUERIES].sort(() => 0.5 - Math.random()).slice(0, 3);
+  const picked = [...QUERIES].sort(() => 0.5 - Math.random()).slice(0, 2);
   console.log('Fetching queries:', picked);
-  for (const query of picked) {
+  for (let i = 0; i < picked.length; i++) {
+    const query = picked[i];
+    if (i > 0) await sleep(5500); // free-tier: не больше 1 запроса в 5 секунд
     try {
       const url = 'https://api.twitterapi.io/twitter/tweet/advanced_search'
                 + '?query=' + encodeURIComponent(query) + '&queryType=Latest';
