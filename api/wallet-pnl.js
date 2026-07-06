@@ -48,12 +48,15 @@ export default async function handler(req, res) {
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return res.status(200).json(cached.data);
 
   try {
-    const [balanceLamports, solPrice] = await Promise.all([
+    const [balanceResult, solPrice] = await Promise.all([
       rpc('getBalance', [address]),
       getSolPriceUsd(),
     ]);
 
-    const balanceSol = (balanceLamports ?? 0) / 1e9;
+    // getBalance возвращает { context: {...}, value: <lamports> } — нужно .value,
+    // а не весь объект целиком (иначе деление объекта на 1e9 даёт NaN → null в JSON)
+    const balanceLamports = balanceResult?.value ?? 0;
+    const balanceSol = balanceLamports / 1e9;
     const balanceUsd = balanceSol * solPrice;
 
     const result = {
