@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/fetch-tweets?secret=brokescan123",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron-airdrop",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
