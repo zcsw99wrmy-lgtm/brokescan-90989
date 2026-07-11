@@ -10,6 +10,7 @@ import {
 } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { readLb } from './leaderboard.js';
+import { appendHistoryRecord } from './airdrop-history.js';
 
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const AIRDROP_AMOUNT_SOL_DEFAULT = parseFloat(process.env.AIRDROP_AMOUNT_SOL || '0.5');
@@ -67,7 +68,7 @@ export async function sendSol(toWalletAddress, amountSol = AIRDROP_AMOUNT_SOL_DE
 }
 
 /**
- * Полный цикл: выбрать случайного участника → отправить SOL.
+ * Полный цикл: выбрать случайного участника → отправить SOL → записать в историю.
  * Баланс в /api/leaderboard не хранится и не трогается — он и так
  * подтягивается фронтендом live через /api/wallet-pnl при следующем опросе,
  * так что новый баланс получателя появится в топе сам собой.
@@ -86,6 +87,18 @@ export async function runRandomAirdrop(opts = {}) {
   } catch (err) {
     return { ok: false, reason: 'send_failed', error: err.message };
   }
+
+  // Пишем в историю для ленты "Recent Sends" на фронте.
+  // Не критичный путь: если запись лога упадёт, транзакция уже прошла,
+  // поэтому не оборачиваем это в try/catch, который бы менял ok на false —
+  // appendHistoryRecord сам глотает свои ошибки и логирует их.
+  await appendHistoryRecord({
+    handle: recipient.handle,
+    name: recipient.name || recipient.handle,
+    wallet: recipient.wallet,
+    amountSol,
+    signature,
+  });
 
   return {
     ok: true,
