@@ -95,6 +95,7 @@ export async function runRandomAirdrop(opts = {}) {
   await appendHistoryRecord({
     handle: recipient.handle,
     name: recipient.name || recipient.handle,
+    avatar: recipient.avatar || '',
     wallet: recipient.wallet,
     amountSol,
     signature,
