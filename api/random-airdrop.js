@@ -19,7 +19,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { poolSize = 50, amountSol = 0.5 } = req.body || {};
+    // ⚠️ ВРЕМЕННО ДЛЯ ТЕСТА: дефолт amountSol снижен с 0.5 до 0.001,
+    // чтобы тестовые прогоны не сжигали реальные деньги.
+    // Когда протестируете и будете готовы к боевому режиму — верните 0.5
+    // (или уберите дефолт вовсе и всегда передавайте amountSol явно).
+    const { poolSize = 50, amountSol = 0.001 } = req.body || {};
     const result = await runRandomAirdrop({ poolSize, amountSol });
 
     if (!result.ok) {
