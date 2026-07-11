@@ -1,6 +1,6 @@
 // api/treasury-check.js
 //
-// Диагностика: показывает публичный адрес кошелька-раздатчика (полученный
+// Диагнотрстика: показывает публичный адрес кошелька-раздатчика (полученный
 // из TREASURY_PRIVATE_KEY) и его текущий баланс в SOL. Приватный ключ
 // нигде не возвращается. Защищено тем же ADMIN_AIRDROP_TOKEN.
 import { Connection, Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js';
