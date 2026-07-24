@@ -8,6 +8,7 @@ import { put, list } from '@vercel/blob';
 
 const LEGACY_HISTORY_KEY = 'brokescan-airdrop-history.json';
 const HISTORY_PREFIX = 'brokescan-airdrop-history/';
+const RESERVATION_PREFIX = 'brokescan-airdrop-reservations/';
 const MAX_RECORDS = 200; // храним последние 200 отправок, старые обрезаем
 
 function recordId(record) {
@@ -91,6 +92,38 @@ export async function appendHistoryRecord(record) {
     // История — не критичный путь: если запись лога не удалась,
     // это не должно ронять уже отправленную транзакцию.
     console.error('appendHistoryRecord error:', e.message);
+  }
+}
+
+/**
+ * Атомарно резервирует получателя на короткое окно времени.
+ * Одинаковый pathname нельзя создать дважды без allowOverwrite, поэтому даже
+ * разные serverless-инстансы не выберут одного человека одновременно.
+ */
+export async function reserveAirdropRecipient(identity, windowMs = 120000) {
+  const safeIdentity = String(identity || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '');
+  if (!safeIdentity) return false;
+
+  const bucket = Math.floor(Date.now() / windowMs);
+  const pathname = `${RESERVATION_PREFIX}${bucket}-${safeIdentity}.json`;
+
+  try {
+    await put(pathname, JSON.stringify({ identity: safeIdentity, reservedAt: Date.now() }), {
+      access: 'public',
+      addRandomSuffix: false,
+      contentType: 'application/json',
+    });
+    return true;
+  } catch (e) {
+    // Файл уже создал другой запрос — берём другого получателя.
+    if (/already exists|already_exist|blob.*exist|conflict/i.test(String(e?.message || e))) {
+      return false;
+    }
+    console.error('reserveAirdropRecipient error:', e.message);
+    return false;
   }
 }
 
