@@ -1,21 +1,33 @@
 import { put, list, get } from '@vercel/blob';
-const API_KEY    = process.env.TWITTERAPI_KEY || 'new1_b5fb91a3bf4f4b36807b97be5f36b076';
+const API_KEY    = process.env.TWITTERAPI_KEY || 'new1_9c1b2678858245aa8481037949cbe980';
 const FEED_KEY   = 'brokescan-feed.json';
 const MAX_TWEETS = 100;
 const MAX_AGE_MS = 30 * 60 * 1000;
 const QUERIES = [
-  'can i get sol', 'can i get some sol', 'send me sol please',
-  'need sol please', 'give me sol', 'pls send sol',
-  'can someone send sol', 'drop me some sol', 'bless me sol',
-  'likes for sol', 'how many likes for sol',
+  // Приоритетные — дублируем для частого выпадания
+  'can i get sol',
+  'can i get sol',
+  'can i get some sol',
+  'can i get some sol',
+  'give me sol',
+  'give me sol',
+  'send me sol',
+  'send me sol',
+  // Остальные
+  'need sol please',
+  'pls send sol',
+  'can someone send sol',
+  'drop me some sol',
+  'bless me sol',
+  'how many likes for sol',
+  'how many retweets for sol',
+  'need some sol',
+  'please send sol',
 ];
 const BEG_STOPS = [
   'i bought','i sold','just bought','just sold','sol price','sol hits',
   'pumping','dumping','bullish','bearish','buy signal','sell signal',
   'sent you','just sent','giving away','airdrop','sol at ','sol to $',
-  'church','disciple','woke up','checked my feed','brushing','humble',
-  'calling the bottom','crypto is','rich or','coping','half of crypto',
-  'moves faster','ex leaving',
 ];
 const BEG_PATTERNS = [
   /\bcan i get\b/i, /\bcan i have\b/i, /\bplease send\b/i, /\bpls send\b/i,
@@ -30,19 +42,13 @@ function isBeg(text) {
   const tl = text.toLowerCase();
   if (!tl.includes('sol') && !tl.includes('solana')) return false;
   if (BEG_STOPS.some(kw => tl.includes(kw))) return false;
-  // Должен быть хотя бы один паттерн просьбы
-  if (!BEG_PATTERNS.some(re => re.test(text))) return false;
-  // Дополнительная проверка — текст должен быть коротким или содержать адрес кошелька
-  // Длинные философские твиты без адреса — не попрошайничество
-  const hasWallet = /[1-9A-HJ-NP-Za-km-z]{32,44}/.test(text);
-  const isShort = text.length < 200;
-  return hasWallet || isShort;
+  return BEG_PATTERNS.some(re => re.test(text));
 }
 async function readFeed() {
   try {
     const { blobs } = await list({ prefix: FEED_KEY });
     if (!blobs.length) return [];
-    const result = await get(blobs[0].pathname, { access: 'public' });
+    const result = await get(blobs[0].pathname, { access: 'private' });
     if (!result || !result.stream) return [];
     const text = await new Response(result.stream).text();
     return JSON.parse(text);
@@ -53,16 +59,12 @@ async function readFeed() {
 }
 async function writeFeed(data) {
   await put(FEED_KEY, JSON.stringify(data), {
-    access: 'public',
+    access: 'private',
     addRandomSuffix: false,
     allowOverwrite: true,
     contentType: 'application/json',
   });
 }
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const secret = req.headers['x-cron-secret'] || req.query.secret;
@@ -73,11 +75,9 @@ export default async function handler(req, res) {
   const existingIds = new Set(existing.map(t => t.tweet_id));
   const now = Date.now();
   const newTweets = [];
-  const picked = [...QUERIES].sort(() => 0.5 - Math.random()).slice(0, 2);
+  const picked = QUERIES; // все запросы
   console.log('Fetching queries:', picked);
-  for (let i = 0; i < picked.length; i++) {
-    const query = picked[i];
-    if (i > 0) await sleep(5500); // free-tier: не больше 1 запроса в 5 секунд
+  for (const query of picked) {
     try {
       const url = 'https://api.twitterapi.io/twitter/tweet/advanced_search'
                 + '?query=' + encodeURIComponent(query) + '&queryType=Latest';
