@@ -8,16 +8,16 @@ const FEED_KEY = 'brokescan-feed.json';
 
 const MAX_TWEETS = 100;
 
-// Показывать твиты не старше 30 минут
-const MAX_AGE_MS = 30 * 60 * 1000;
-
-// Максимальное число одновременных запросов к Twitter API
-const CONCURRENCY = 5;
+// Показывать твиты не старше 2 часов. Это даёт повторному запуску время
+// подобрать твит, если Twitter Search проиндексировал его с задержкой.
+const MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 const QUERIES = [
   'can i get sol',
   'can i get some sol',
   'can i get 1 sol',
+  'can i get 0.1 sol',
+  'can i get 0.2 sol',
   'can i get 0.5 sol',
   'can i have sol',
   'give me sol',
@@ -29,13 +29,22 @@ const QUERIES = [
   'bless me with sol',
   'bless my wallet with sol',
   'how many likes for sol',
+  'how many likes sol',
+  'how many likes for 0.1 sol',
+  'how many likes for 0.2 sol',
+  'how many likes for 0.5 sol',
   'how many likes for 1 sol',
   'how many retweets for sol',
+  'how many retweets sol',
   'need some sol',
   'please send sol',
   'please 1 sol',
   'spare some sol',
 ];
+
+// Все поисковые фразы запускаются параллельно. Так один проход обычно
+// заканчивается за время самого медленного запроса, а не нескольких пачек.
+const CONCURRENCY = QUERIES.length;
 
 const BEG_STOPS = [
   'i bought',
@@ -53,7 +62,9 @@ const BEG_STOPS = [
   'sent you',
   'just sent',
   'giving away',
-  'airdrop',
+  'claim airdrop',
+  'airdrop is live',
+  'airdrop to ',
   'sol at ',
   'sol to $',
   'casino',
@@ -96,9 +107,9 @@ const BEG_PATTERNS = [
   /\bbless my wallet(?: with)?(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
   // how many likes for sol / how many likes for 1 sol
-  /\bhow many (?:likes?|rts?|retweets?) for (?:\d*\.?\d+ )?(?:sol|solana)\b/i,
+  /\bhow many (?:likes?|rts?|retweets?) for (?:\d*\.?\d+\s*)?(?:sol|solana)\b/i,
 
-  /\b(?:likes?|rts?|retweets?) for (?:\d*\.?\d+ )?(?:sol|solana)\b/i,
+  /\b(?:likes?|rts?|retweets?) for (?:\d*\.?\d+\s*)?(?:sol|solana)\b/i,
 ];
 
 function normalizeText(text) {
@@ -106,6 +117,7 @@ function normalizeText(text) {
     .toLowerCase()
     .replace(/\$sol\b/g, 'sol')
     .replace(/\$solana\b/g, 'solana')
+    .replace(/(\d),(\d)/g, '$1.$2')
     .replace(/\s+/g, ' ')
     .trim();
 }
