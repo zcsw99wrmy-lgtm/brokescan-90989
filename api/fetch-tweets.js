@@ -17,6 +17,8 @@ const CONCURRENCY = 5;
 const QUERIES = [
   'can i get sol',
   'can i get some sol',
+  'can i get 1 sol',
+  'can i get 0.5 sol',
   'can i have sol',
   'give me sol',
   'send me sol',
@@ -27,9 +29,11 @@ const QUERIES = [
   'bless me with sol',
   'bless my wallet with sol',
   'how many likes for sol',
+  'how many likes for 1 sol',
   'how many retweets for sol',
   'need some sol',
   'please send sol',
+  'please 1 sol',
   'spare some sol',
 ];
 
@@ -60,35 +64,41 @@ const BEG_STOPS = [
 ];
 
 const BEG_PATTERNS = [
-  /\bcan i (?:get|have)(?: some| any| a little)? (?:sol|solana)\b/i,
+  // can i get sol / can i get some sol / can i get 1 sol
+  /\bcan i (?:get|have)(?: some| any| a little| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bcan someone (?:send|give|drop) me(?: some| any)? (?:sol|solana)\b/i,
+  // can someone send me sol / can someone send me 0.5 sol
+  /\bcan someone (?:send|give|drop) me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\b(?:anyone|somebody) (?:send|give|drop) me(?: some| any)? (?:sol|solana)\b/i,
+  /\b(?:anyone|somebody) (?:send|give|drop) me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\b(?:please|pls) send me(?: some| any)? (?:sol|solana)\b/i,
+  /\b(?:please|pls|plz) send me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\b(?:please|pls) send(?: some| any)? (?:sol|solana)\b/i,
+  /\b(?:please|pls|plz) send(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bsend me(?: some| any)? (?:sol|solana)\b/i,
+  // please 1 sol legend
+  /\b(?:please|pls|plz)(?: \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bgive me(?: some| any)? (?:sol|solana)\b/i,
+  /\bsend me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bdrop me(?: some| any)? (?:sol|solana)\b/i,
+  /\bgive me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bi need(?: some| any| a little)? (?:sol|solana)\b/i,
+  /\bdrop me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bneed(?: some| any| a little)? (?:sol|solana)(?: please| pls)?\b/i,
+  /\bi need(?: some| any| a little| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bspare(?: me)?(?: some| any)? (?:sol|solana)\b/i,
+  /\bneed(?: some| any| a little| \d*\.?\d+)? (?:sol|solana)(?: please| pls| plz)?\b/i,
 
-  /\bbless me with(?: some| any)? (?:sol|solana)\b/i,
+  /\bspare(?: me)?(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bbless my wallet(?: with)?(?: some| any)? (?:sol|solana)\b/i,
+  /\bbless me with(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bhow many (?:likes?|rts?|retweets?) for (?:sol|solana)\b/i,
+  /\bbless my wallet(?: with)?(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\b(?:likes?|rts?|retweets?) for (?:sol|solana)\b/i,
+  // how many likes for sol / how many likes for 1 sol
+  /\bhow many (?:likes?|rts?|retweets?) for (?:\d*\.?\d+ )?(?:sol|solana)\b/i,
+
+  /\b(?:likes?|rts?|retweets?) for (?:\d*\.?\d+ )?(?:sol|solana)\b/i,
 ];
 
 function normalizeText(text) {
@@ -220,12 +230,18 @@ async function fetchQuery(query) {
     encodeURIComponent(query) +
     '&queryType=Latest';
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    20_000
+  );
+
   try {
     const response = await fetch(url, {
       headers: {
         'X-API-Key': API_KEY,
       },
-      signal: AbortSignal.timeout(20_000),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -242,11 +258,16 @@ async function fetchQuery(query) {
 
     const data = await response.json();
 
-    const tweets =
+    const rawTweets =
       data.tweets ||
+      data.timeline?.tweets ||
       data.timeline ||
       data.results ||
       [];
+
+    const tweets = Array.isArray(rawTweets)
+      ? rawTweets
+      : [];
 
     const matching = tweets.filter((tweet) =>
       isBeg(tweet.text || tweet.full_text)
@@ -257,7 +278,7 @@ async function fetchQuery(query) {
       `isBeg: ${matching.length}`
     );
 
-    return tweets;
+    return matching;
   } catch (error) {
     console.error(
       `Fetch error for "${query}":`,
@@ -267,6 +288,8 @@ async function fetchQuery(query) {
     );
 
     return [];
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
