@@ -36,6 +36,13 @@ const QUERIES = [
   'how many likes for 1 sol',
   'how many retweets for sol',
   'how many retweets sol',
+  '@brokescan sol',
+  '@brokescan send me sol',
+  '@brokescan can u send me sol',
+  '@brokescan can you send me sol',
+  '@brokescan can u send me 1 sol',
+  '@brokescan give me sol',
+  '@brokescan sol please',
   'need some sol',
   'please send sol',
   'please 1 sol',
@@ -86,6 +93,13 @@ const BEG_PATTERNS = [
   /\b(?:please|pls|plz) send me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
   /\b(?:please|pls|plz) send(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+
+  // @brokescan can u/can you/could u send me 1 sol?
+  /\bbrokescan\b.*\b(?:can|could|would) (?:u|you) (?:send|give|drop) me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+
+  /\b(?:can|could|would) (?:u|you) (?:send|give|drop) me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+
+  /\bbrokescan\b.*\b(?:send|give|drop) me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
   // please 1 sol legend
   /\b(?:please|pls|plz)(?: \d*\.?\d+)? (?:sol|solana)\b/i,
