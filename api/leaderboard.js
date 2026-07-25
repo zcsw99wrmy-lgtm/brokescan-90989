@@ -1,11 +1,47 @@
 import { put, list } from '@vercel/blob';
 const LB_KEY     = 'brokescan-leaderboard.json';
-const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 дней
+const RESET_MARKER_KEY = 'brokescan-leaderboard-reset-vina-vancova-v2.json';
+let resetInFlight = null;
 
-// ⚠️ ИЗМЕНЕНИЕ: добавлен `export` перед обеими функциями (было — без export),
-// чтобы их можно было импортировать из api/_lib/airdrop-service.js
-// без дублирования логики чтения/записи блоба.
-export async function readLb() {
+function normalizeIdentity(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .replace(/\uFE0F/g, '')
+    .replace(/^@/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function selectedId(entry, key = '') {
+  if (!entry || typeof entry !== 'object') return null;
+  const values = [
+    normalizeIdentity(entry.name),
+    normalizeIdentity(entry.handle),
+    normalizeIdentity(key),
+  ];
+  if (values.includes(normalizeIdentity('🟢Vina🍪'))) return 'vina';
+  if (values.includes(normalizeIdentity('VANCOVA 👶🐂🪖'))) return 'vancova';
+  return null;
+}
+
+function keepOnlySelected(data) {
+  const selected = new Map();
+  for (const [key, entry] of Object.entries(data || {})) {
+    const id = selectedId(entry, key);
+    if (!id) continue;
+    const previous = selected.get(id);
+    if (!previous || Number(entry.lastSeen || 0) >= Number(previous.entry.lastSeen || 0)) {
+      selected.set(id, { key, entry });
+    }
+  }
+
+  return Object.fromEntries(
+    [...selected.values()].map(({ key, entry }) => [entry.handle || key, entry])
+  );
+}
+
+async function readLbRaw() {
   try {
     const { blobs } = await list({ prefix: LB_KEY });
     if (!blobs.length) return {};
@@ -18,7 +54,8 @@ export async function readLb() {
     return {};
   }
 }
-export async function writeLb(data) {
+
+async function writeLbRaw(data) {
   await put(LB_KEY, JSON.stringify(data), {
     access: 'public',
     addRandomSuffix: false,
@@ -26,26 +63,61 @@ export async function writeLb(data) {
     contentType: 'application/json',
   });
 }
+
+async function resetLeaderboardOnce() {
+  const { blobs } = await list({ prefix: RESET_MARKER_KEY });
+  if (blobs.some(blob => blob.pathname === RESET_MARKER_KEY)) return;
+
+  const current = await readLbRaw();
+  const initial = keepOnlySelected(current);
+  await writeLbRaw(initial);
+  await put(RESET_MARKER_KEY, JSON.stringify({
+    completedAt: Date.now(),
+    kept: ['🟢Vina🍪', 'VANCOVA 👶🐂🪖'],
+  }), {
+    access: 'public',
+    addRandomSuffix: false,
+    contentType: 'application/json',
+  });
+}
+
+async function ensureInitialReset() {
+  if (!resetInFlight) {
+    resetInFlight = resetLeaderboardOnce().finally(() => {
+      resetInFlight = null;
+    });
+  }
+  await resetInFlight;
+}
+
+// Первый вызов очищает старый список. После создания marker-файла функция
+// снова возвращает всех участников, включая добавившихся позднее.
+export async function readLb() {
+  await ensureInitialReset();
+  return readLbRaw();
+}
+
+export async function writeLb(data) {
+  await ensureInitialReset();
+  await writeLbRaw(data);
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
   try {
     if (req.method === 'GET') {
       const lb = await readLb();
-      const now = Date.now();
-      // Отфильтровываем протухшие записи, попутно отсеивая любые "битые"
-      // (не-объекты / null), чтобы одна плохая запись не роняла весь эндпоинт.
-      const filtered = Object.fromEntries(
-        Object.entries(lb).filter(([, v]) => {
-          if (!v || typeof v !== 'object') return false;
-          return !v.firstSeen || (now - v.firstSeen) < MAX_AGE_MS;
-        })
+      const valid = Object.fromEntries(
+        Object.entries(lb).filter(([, v]) => v && typeof v === 'object')
       );
-      return res.status(200).json({ leaderboard: filtered });
+      return res.status(200).json({ leaderboard: valid });
     }
     if (req.method === 'POST') {
       const entry = req.body;
       if (!entry?.handle) return res.status(400).json({ error: 'handle required' });
+
+      // После одноразовой очистки любые новые участники снова разрешены.
       const lb = await readLb();
       const ex = lb[entry.handle];
       const exSafe = (ex && typeof ex === 'object') ? ex : {};
