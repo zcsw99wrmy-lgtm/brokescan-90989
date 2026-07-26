@@ -2,7 +2,7 @@ import { put, list } from '@vercel/blob';
 
 const API_KEY =
   process.env.TWITTERAPI_KEY ||
-  'new1_b5fb91a3bf5f36b076';
+  'new1_b5fb91a3bf4f4b36807b97be5f36b076';
 
 const FEED_KEY = 'brokescan-feed.json';
 
@@ -81,6 +81,16 @@ const BEG_STOPS = [
   'gaming',
 ];
 
+// Рассказы о прошлых переводах и обсуждение уже полученных денег —
+// это не просьбы. Проверяем их до положительных шаблонов.
+const BEG_CONTEXT_STOPS = [
+  /\b(?:sent|gave|paid|transferred) me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+  /\b(?:i|we) (?:sent|gave|paid|transferred)(?: someone| them| him| her)?(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+  /\b(?:received|got)(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+  /\b(?:already|previously|earlier|yesterday|last time)\b.*\b(?:sent|gave|paid|received|got)\b/i,
+  /\bsend me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b.*\b(?:and|when) it was\b/i,
+];
+
 const BEG_PATTERNS = [
   // can i get sol / can i get some sol / can i get 1 sol
   /\bcan i (?:get|have)(?: some| any| a little| \d*\.?\d+)? (?:sol|solana)\b/i,
@@ -104,11 +114,11 @@ const BEG_PATTERNS = [
   // please 1 sol legend
   /\b(?:please|pls|plz)(?: \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bsend me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+  /^(?:@\w+\s+)*(?:(?:please|pls|plz)\s+)?send me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bgive me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+  /^(?:@\w+\s+)*(?:(?:please|pls|plz)\s+)?give me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
-  /\bdrop me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
+  /^(?:@\w+\s+)*(?:(?:please|pls|plz)\s+)?drop me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
 
   /\bi need(?: some| any| a little| \d*\.?\d+)? (?:sol|solana)\b/i,
 
@@ -143,16 +153,21 @@ function isBeg(text) {
 
   const normalized = normalizeText(text);
 
-  if (
-    !normalized.includes('sol') &&
-    !normalized.includes('solana')
-  ) {
+  if (!/\b(?:sol|solana)\b/i.test(normalized)) {
     return false;
   }
 
   if (
     BEG_STOPS.some((keyword) =>
       normalized.includes(keyword)
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    BEG_CONTEXT_STOPS.some((pattern) =>
+      pattern.test(normalized)
     )
   ) {
     return false;
