@@ -2,7 +2,7 @@ import { put, list } from '@vercel/blob';
 
 const API_KEY =
   process.env.TWITTERAPI_KEY ||
-  'new1_c784bfc6c61a4e6985f06710dc7a8c5a';
+  'new1_b5fb91a3bf4f4b36807b97be5f36b076';
 
 const FEED_KEY = 'brokescan-feed.json';
 
@@ -12,7 +12,22 @@ const MAX_TWEETS = 100;
 // подобрать твит, если Twitter Search проиндексировал его с задержкой.
 const MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
-const QUERIES = [
+// Запросы с отметкой @brokescan имеют приоритет и проверяются
+// при каждом запуске.
+const PRIORITY_QUERIES = [
+  '@brokescan',
+  '@brokescan sol',
+  '@brokescan send me sol',
+  '@brokescan can u send me sol',
+  '@brokescan can you send me sol',
+  '@brokescan give me sol',
+  '@brokescan how many likes for sol',
+  '@brokescan sol please',
+];
+
+// Обычные просьбы тоже ищем, но только часть списка за один запуск.
+// Список циклически сдвигается, поэтому все фразы регулярно проверяются.
+const GENERIC_QUERIES = [
   'can i get sol',
   'can i get some sol',
   'can i get 1 sol',
@@ -36,22 +51,14 @@ const QUERIES = [
   'how many likes for 1 sol',
   'how many retweets for sol',
   'how many retweets sol',
-  '@brokescan sol',
-  '@brokescan send me sol',
-  '@brokescan can u send me sol',
-  '@brokescan can you send me sol',
-  '@brokescan can u send me 1 sol',
-  '@brokescan give me sol',
-  '@brokescan sol please',
   'need some sol',
   'please send sol',
   'please 1 sol',
   'spare some sol',
 ];
 
-// Все поисковые фразы запускаются параллельно. Так один проход обычно
-// заканчивается за время самого медленного запроса, а не нескольких пачек.
-const CONCURRENCY = QUERIES.length;
+const GENERIC_QUERIES_PER_RUN = 10;
+const QUERY_ROTATION_MS = 2 * 60 * 1000;
 
 const BEG_STOPS = [
   'i bought',
@@ -74,6 +81,8 @@ const BEG_STOPS = [
   'airdrop to ',
   'sol at ',
   'sol to $',
+  // Sol Ruca — имя рестлера, а не просьба отправить SOL.
+  'sol ruca',
   'casino',
   'jackpot',
   'one shot',
@@ -84,6 +93,9 @@ const BEG_STOPS = [
 // Рассказы о прошлых переводах и обсуждение уже полученных денег —
 // это не просьбы. Проверяем их до положительных шаблонов.
 const BEG_CONTEXT_STOPS = [
+  // Например: "Give me Sol Ruca vs Lyra ... for the title".
+  // Здесь SOL является частью имени в спортивном контексте.
+  /\bgive me sol [a-z][a-z'-]+\b.*\b(?:vs|title|titles|championship|match|contenders?)\b/i,
   /\b(?:sent|gave|paid|transferred) me(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
   /\b(?:i|we) (?:sent|gave|paid|transferred)(?: someone| them| him| her)?(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
   /\b(?:received|got)(?: some| any| \d*\.?\d+)? (?:sol|solana)\b/i,
@@ -92,6 +104,12 @@ const BEG_CONTEXT_STOPS = [
 ];
 
 const BEG_PATTERNS = [
+  // Для твитов с @brokescan принимаем больше вариантов формулировки,
+  // но в тексте всё равно должна быть просьба и слово SOL/Solana.
+  /@brokescan\b.*\b(?:can|could|would|send|give|drop|need|want|please|pls|plz|likes?|retweets?|rts?)\b.*\b(?:sol|solana)\b/i,
+
+  /@brokescan\b.*\b(?:sol|solana)\b.*\b(?:please|pls|plz|send|give|drop|need|want|likes?|retweets?|rts?)\b/i,
+
   // can i get sol / can i get some sol / can i get 1 sol
   /\bcan i (?:get|have)(?: some| any| a little| \d*\.?\d+)? (?:sol|solana)\b/i,
 
@@ -175,6 +193,55 @@ function isBeg(text) {
 
   return BEG_PATTERNS.some((pattern) =>
     pattern.test(normalized)
+  );
+}
+
+function isPriorityTweet(text) {
+  return /@brokescan\b/i.test(String(text || ''));
+}
+
+function getQueriesForRun(now) {
+  const genericCount = Math.min(
+    GENERIC_QUERIES_PER_RUN,
+    GENERIC_QUERIES.length
+  );
+
+  const rotation = Math.floor(
+    now / QUERY_ROTATION_MS
+  );
+
+  const startIndex =
+    rotation % GENERIC_QUERIES.length;
+
+  const selectedGeneric = [];
+
+  for (let index = 0; index < genericCount; index += 1) {
+    selectedGeneric.push(
+      GENERIC_QUERIES[
+        (startIndex + index) %
+        GENERIC_QUERIES.length
+      ]
+    );
+  }
+
+  return [
+    ...PRIORITY_QUERIES,
+    ...selectedGeneric,
+  ];
+}
+
+function compareTweets(a, b) {
+  const priorityDifference =
+    Number(isPriorityTweet(b.text)) -
+    Number(isPriorityTweet(a.text));
+
+  if (priorityDifference !== 0) {
+    return priorityDifference;
+  }
+
+  return (
+    getTweetTimestamp(b) -
+    getTweetTimestamp(a)
   );
 }
 
@@ -479,13 +546,19 @@ export default async function handler(req, res) {
       )
     );
 
+    const queries = getQueriesForRun(now);
+
     console.log(
-      `Fetching ${QUERIES.length} unique queries`
+      `Fetching ${queries.length} queries: ` +
+      `${PRIORITY_QUERIES.length} priority, ` +
+      `${queries.length - PRIORITY_QUERIES.length} generic`
     );
 
+    // Все выбранные запросы запускаются параллельно. Приоритетные
+    // запросы присутствуют в каждом проходе.
     const rawTweets = await fetchInBatches(
-      QUERIES,
-      CONCURRENCY
+      queries,
+      queries.length
     );
 
     const newTweets = [];
@@ -515,12 +588,7 @@ export default async function handler(req, res) {
       existingIds.add(converted.tweet_id);
     }
 
-    newTweets.sort((a, b) => {
-      return (
-        getTweetTimestamp(b) -
-        getTweetTimestamp(a)
-      );
-    });
+    newTweets.sort(compareTweets);
 
     const finalFeed = [
       ...newTweets,
@@ -532,6 +600,7 @@ export default async function handler(req, res) {
       .filter((tweet) =>
         isBeg(tweet.text)
       )
+      .sort(compareTweets)
       .slice(0, MAX_TWEETS);
 
     const feedChanged =
@@ -549,7 +618,10 @@ export default async function handler(req, res) {
     return res.status(200).json({
       added: newTweets.length,
       total: finalFeed.length,
-      queries: QUERIES.length,
+      queries: queries.length,
+      priority_queries: PRIORITY_QUERIES.length,
+      generic_queries:
+        queries.length - PRIORITY_QUERIES.length,
     });
   } catch (error) {
     console.error('Handler failed:', error);
