@@ -2,7 +2,7 @@ import { put, list } from '@vercel/blob';
 
 const API_KEY =
   process.env.TWITTERAPI_KEY ||
-  'new1_b5fb91a3bf4f4b36807b97be5f36b076';
+  'new1_c784bfc6c61a4e6985f06710dc7a8c5a';
 
 const FEED_KEY = 'brokescan-feed.json';
 
