@@ -1,7 +1,5 @@
 import { put, list } from '@vercel/blob';
 const LB_KEY = 'brokescan-leaderboard.json';
-const RESET_MARKER_KEY = 'brokescan-leaderboard-reset-joey-vina-v3.json';
-let resetInFlight = null;
 
 function normalizeIdentity(value) {
   return String(value || '')
@@ -20,8 +18,20 @@ function selectedId(entry, key = '') {
     normalizeIdentity(entry.handle),
     normalizeIdentity(key),
   ];
-  if (values.includes(normalizeIdentity('ðŸŸ¢VinaðŸª'))) return 'vina';
-  if (values.includes(normalizeIdentity('Joey'))) return 'joey';
+  if (
+    values.includes(normalizeIdentity('🟢Vina🍪')) ||
+    values.includes(normalizeIdentity('@worldofvina'))
+  ) {
+    return 'vina';
+  }
+
+  if (
+    values.includes(normalizeIdentity('Joey')) ||
+    values.includes(normalizeIdentity('@Joeyekpe001'))
+  ) {
+    return 'joey';
+  }
+
   return null;
 }
 
@@ -64,42 +74,24 @@ async function writeLbRaw(data) {
   });
 }
 
-async function resetLeaderboardOnce() {
-  const { blobs } = await list({ prefix: RESET_MARKER_KEY });
-  if (blobs.some(blob => blob.pathname === RESET_MARKER_KEY)) return;
-
-  const current = await readLbRaw();
-  const initial = keepOnlySelected(current);
-  await writeLbRaw(initial);
-  await put(RESET_MARKER_KEY, JSON.stringify({
-    completedAt: Date.now(),
-    kept: ['Joey', 'ðŸŸ¢VinaðŸª'],
-  }), {
-    access: 'public',
-    addRandomSuffix: false,
-    contentType: 'application/json',
-  });
-}
-
-async function ensureInitialReset() {
-  if (!resetInFlight) {
-    resetInFlight = resetLeaderboardOnce().finally(() => {
-      resetInFlight = null;
-    });
-  }
-  await resetInFlight;
-}
-
-// ÐŸÐµÑ€Ð²Ñ‹Ð¹ Ð²Ñ‹Ð·Ð¾Ð² Ð¾Ñ‡Ð¸Ñ‰Ð°ÐµÑ‚ ÑÑ‚Ð°Ñ€Ñ‹Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº. ÐŸÐ¾ÑÐ»Ðµ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ marker-Ñ„Ð°Ð¹Ð»Ð° Ñ„ÑƒÐ½ÐºÑ†Ð¸Ñ
-// ÑÐ½Ð¾Ð²Ð° Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ Ð²ÑÐµÑ… ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¾Ð², Ð²ÐºÐ»ÑŽÑ‡Ð°Ñ Ð´Ð¾Ð±Ð°Ð²Ð¸Ð²ÑˆÐ¸Ñ…ÑÑ Ð¿Ð¾Ð·Ð´Ð½ÐµÐµ.
+// Фильтр постоянный: при каждом чтении удаляем из Blob всех,
+// кроме Joey и Vina, и возвращаем только этих двух участников.
 export async function readLb() {
-  await ensureInitialReset();
-  return readLbRaw();
+  const current = await readLbRaw();
+  const selected = keepOnlySelected(current);
+
+  if (
+    Object.keys(selected).length !==
+    Object.keys(current).length
+  ) {
+    await writeLbRaw(selected);
+  }
+
+  return selected;
 }
 
 export async function writeLb(data) {
-  await ensureInitialReset();
-  await writeLbRaw(data);
+  await writeLbRaw(keepOnlySelected(data));
 }
 
 export default async function handler(req, res) {
@@ -117,7 +109,14 @@ export default async function handler(req, res) {
       const entry = req.body;
       if (!entry?.handle) return res.status(400).json({ error: 'handle required' });
 
-      // ÐŸÐ¾ÑÐ»Ðµ Ð¾Ð´Ð½Ð¾Ñ€Ð°Ð·Ð¾Ð²Ð¾Ð¹ Ð¾Ñ‡Ð¸ÑÑ‚ÐºÐ¸ Ð»ÑŽÐ±Ñ‹Ðµ Ð½Ð¾Ð²Ñ‹Ðµ ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¸ ÑÐ½Ð¾Ð²Ð° Ñ€Ð°Ð·Ñ€ÐµÑˆÐµÐ½Ñ‹.
+      // Не добавляем в лидерборд никого, кроме Joey и Vina.
+      if (!selectedId(entry, entry.handle)) {
+        return res.status(200).json({
+          ok: true,
+          ignored: true,
+        });
+      }
+
       const lb = await readLb();
       const ex = lb[entry.handle];
       const exSafe = (ex && typeof ex === 'object') ? ex : {};
