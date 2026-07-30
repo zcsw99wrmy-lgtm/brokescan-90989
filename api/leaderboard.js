@@ -1,6 +1,6 @@
 import { put, list } from '@vercel/blob';
-const LB_KEY     = 'brokescan-leaderboard.json';
-const RESET_MARKER_KEY = 'brokescan-leaderboard-reset-vina-vancova-v2.json';
+const LB_KEY = 'brokescan-leaderboard.json';
+const RESET_MARKER_KEY = 'brokescan-leaderboard-reset-joey-vina-v3.json';
 let resetInFlight = null;
 
 function normalizeIdentity(value) {
@@ -20,8 +20,8 @@ function selectedId(entry, key = '') {
     normalizeIdentity(entry.handle),
     normalizeIdentity(key),
   ];
-  if (values.includes(normalizeIdentity('🟢Vina🍪'))) return 'vina';
-  if (values.includes(normalizeIdentity('VANCOVA 👶🐂🪖'))) return 'vancova';
+  if (values.includes(normalizeIdentity('ðŸŸ¢VinaðŸª'))) return 'vina';
+  if (values.includes(normalizeIdentity('Joey'))) return 'joey';
   return null;
 }
 
@@ -73,7 +73,7 @@ async function resetLeaderboardOnce() {
   await writeLbRaw(initial);
   await put(RESET_MARKER_KEY, JSON.stringify({
     completedAt: Date.now(),
-    kept: ['🟢Vina🍪', 'VANCOVA 👶🐂🪖'],
+    kept: ['Joey', 'ðŸŸ¢VinaðŸª'],
   }), {
     access: 'public',
     addRandomSuffix: false,
@@ -90,8 +90,8 @@ async function ensureInitialReset() {
   await resetInFlight;
 }
 
-// Первый вызов очищает старый список. После создания marker-файла функция
-// снова возвращает всех участников, включая добавившихся позднее.
+// ÐŸÐµÑ€Ð²Ñ‹Ð¹ Ð²Ñ‹Ð·Ð¾Ð² Ð¾Ñ‡Ð¸Ñ‰Ð°ÐµÑ‚ ÑÑ‚Ð°Ñ€Ñ‹Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº. ÐŸÐ¾ÑÐ»Ðµ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ marker-Ñ„Ð°Ð¹Ð»Ð° Ñ„ÑƒÐ½ÐºÑ†Ð¸Ñ
+// ÑÐ½Ð¾Ð²Ð° Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ Ð²ÑÐµÑ… ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¾Ð², Ð²ÐºÐ»ÑŽÑ‡Ð°Ñ Ð´Ð¾Ð±Ð°Ð²Ð¸Ð²ÑˆÐ¸Ñ…ÑÑ Ð¿Ð¾Ð·Ð´Ð½ÐµÐµ.
 export async function readLb() {
   await ensureInitialReset();
   return readLbRaw();
@@ -117,7 +117,7 @@ export default async function handler(req, res) {
       const entry = req.body;
       if (!entry?.handle) return res.status(400).json({ error: 'handle required' });
 
-      // После одноразовой очистки любые новые участники снова разрешены.
+      // ÐŸÐ¾ÑÐ»Ðµ Ð¾Ð´Ð½Ð¾Ñ€Ð°Ð·Ð¾Ð²Ð¾Ð¹ Ð¾Ñ‡Ð¸ÑÑ‚ÐºÐ¸ Ð»ÑŽÐ±Ñ‹Ðµ Ð½Ð¾Ð²Ñ‹Ðµ ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¸ ÑÐ½Ð¾Ð²Ð° Ñ€Ð°Ð·Ñ€ÐµÑˆÐµÐ½Ñ‹.
       const lb = await readLb();
       const ex = lb[entry.handle];
       const exSafe = (ex && typeof ex === 'object') ? ex : {};
